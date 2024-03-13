@@ -1,9 +1,9 @@
 <?php
 class Database{
     private $hostname = "localhost";
-    private $database = "sis_proyecto";
+    private $database = "lote";
     private $username = "root";
-    private $password = "123456";
+    private $password = "";
     private $charset = "utf8";
     function conectar(){
         try{

@@ -3,34 +3,54 @@ require_once("db/conexion.php");
 $base = new Database();
 $conexion = $base->conectar();
 
+require 'vendor/autoload.php';
+
+use Picqer\Barcode\BarcodeGeneratorPNG;
+
 if (isset($_POST["btn-guardar"])) {
-    $documento = $_POST['documento'];
-    $nombres = $_POST['nombres'];
-    $raw_password = $_POST['contrasena'];  // Contraseña sin cifrar
+    // Obtener datos del formulario
+    $id_lote = $_POST['id_lote'];
+    $barrio = $_POST['barrio'];
+    $frente = $_POST['frente'];
+    $ancho = $_POST['ancho'];  
+    $dueño = $_POST['dueño'];  
 
-    // Encriptar la contraseña utilizando password_hash
-    $hashed_password = password_hash($raw_password, PASSWORD_DEFAULT);
+    // Validar campos requeridos
+    $campos_requeridos = ['id_lote', 'barrio', 'frente', 'ancho', 'dueño'];
+    $campos_vacios = [];
+    foreach ($campos_requeridos as $campo) {
+        if (empty($_POST[$campo])) {
+            $campos_vacios[] = $campo;
+        }
+    }
 
-    $id_rol = $_POST['id_rol'];
-    $id_tipo_documento = $_POST['id_tipo_documento'];
-
-    // Puedes definir el valor de id_estados directamente o recuperarlo de alguna lógica específica
-    $id_estados = 1; // Por ejemplo, asumamos que 1 es un estado válido
-
-    // Utilizamos consultas preparadas para mejorar la seguridad
-    $validar = $conexion->prepare("SELECT * FROM usuario WHERE documento = ?");
-    $validar->execute([$documento]);
-    $fila1 = $validar->fetchAll(PDO::FETCH_ASSOC);
-
-    if ($fila1) {
-        echo '<script>alert("El documento ya está registrado.");</script>';
+    if (!empty($campos_vacios)) {
+        echo '<script>alert("Los siguientes campos son obligatorios: ' . implode(', ', $campos_vacios) . '");</script>';
     } else {
-        // Utilizamos consultas preparadas para mejorar la seguridad
-        $consulta3 = $conexion->prepare("INSERT INTO usuario (documento, nombres, contrasena, id_rol, id_tipo_documento, id_estados) VALUES (?, ?, ?, ?, ?, ?)");
-        $consulta3->execute([$documento, $nombres, $hashed_password, $id_rol, $id_tipo_documento, $id_estados]);
+        // Utilizar consultas preparadas para mejorar la seguridad
+        $consulta = $conexion->prepare("SELECT * FROM lote WHERE id_lote = ?");
+        $consulta->execute([$id_lote]);
+        $num_filas = $consulta->rowCount();
 
-        echo '<script>alert("Registro exitoso, gracias");</script>';
-        exit();
+        if ($num_filas > 0) {
+            echo '<script>alert("El id_lote ya está registrado.");</script>';
+        } else {
+            $codigo_de_barras = uniqid();
+
+            $generator = new BarcodeGeneratorPNG();
+            $codigo_imagen = $generator->getBarcode($codigo_de_barras, $generator::TYPE_CODE_128);
+
+            // Guardar el código de barras en un archivo
+            file_put_contents(__DIR__ . '/images/' . $codigo_de_barras . '.png', $codigo_imagen);
+
+            // Insertar el nuevo lote en la base de datos
+            $consulta_insertar = $conexion->prepare("INSERT INTO lote (id_lote, barrio, frente, ancho, dueño, cod_barras) VALUES (?, ?, ?, ?, ?, ?)");
+            $consulta_insertar->execute([$id_lote, $barrio, $frente, $ancho, $dueño, $codigo_de_barras]);
+
+            echo '<script>alert ("Registro exitoso, gracias");</script>';
+            echo '<script>window.location= "registro.php."</script>';
+            exit();
+        }
     }
 }
 ?>
@@ -42,40 +62,54 @@ if (isset($_POST["btn-guardar"])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Registro de Usuario</title>
+    <title>Registro de lote</title>
     <!-- Bootstrap CSS -->
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
     <!-- Custom CSS -->
     <style>
         body {
-            background-color: #f8f9fa; /* Fondo claro */
-            color: #495057; /* Color del texto */
+            background-color: #343a40;
+            /* Fondo oscuro */
+            color: #adb5bd;
+            /* Color del texto */
             padding-top: 50px;
         }
 
         .form-container {
-            background-color: #ffffff; /* Fondo blanco */
+            background-color: #495057;
+            /* Fondo gris oscuro */
             border-radius: 15px;
             padding: 20px;
-            box-shadow: 0px 0px 10px 0px rgba(0,0,0,0.1); /* Sombra ligera */
-        }
-
-        select, input {
-            border: 2px solid #007bff; /* Color del borde */
-            border-radius: 5px;
-            padding: 10px;
-            margin-bottom: 10px;
-            color: #495057; /* Color del texto del input */
-            background-color: #fff; /* Color del fondo del input */
+            box-shadow: 0px 0px 10px 0px rgba(0, 0, 0, 0.1);
+            /* Sombra ligera */
+            max-width: 400px;
+            margin: 0 auto;
+            /* Centrar en la página */
         }
 
         label {
-            margin-bottom: 0;
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
         }
 
         .btn-primary {
-            background-color: #007bff; /* Color del botón principal */
+            background-color: #007bff;
+            /* Color del botón principal */
             border-color: #007bff;
+            color: #fff;
+            /* Color del texto del botón */
+            padding: 10px 20px;
+            cursor: pointer;
+            border-radius: 5px;
+            display: inline-block;
+            text-decoration: none;
+            transition: background-color 0.3s ease;
+        }
+
+        .btn-primary:hover {
+            background-color: #0056b3;
+            /* Color del botón principal al pasar el mouse */
         }
     </style>
 </head>
@@ -86,39 +120,32 @@ if (isset($_POST["btn-guardar"])) {
             <div class="col-md-6">
                 <div class="form-container">
                     <form method="POST" action="">
-                        <h2 class="mb-4">Registro de Usuario</h2>
+                        <h2 class="mb-4">Registro de lote</h2>
                         <div class="form-group">
-                            <label for="documento">Documento de Identidad:</label>
-                            <input type="text" class="form-control" name="documento" required>
+                            <label for="id_lote">numero de lote:</label>
+                            <input type="number" class="form-control" id="id_lote" name="id_lote" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="barrio">Barrio:</label>
+                            <input type="text" class="form-control" name="barrio" required>
                         </div>
                         <div class="form-group">
-                            <label for="nombres">Nombre:</label>
-                            <input type="text" class="form-control" name="nombres" required>
+                            <label for="frente">Frente:</label>
+                            <input type="number" class="form-control" name="frente" required>
                         </div>
                         <div class="form-group">
-                            <label for="contrasena">Contraseña:</label>
-                            <input type="password" class="form-control" name="contrasena" required>
+                            <label for="ancho">Ancho:</label>
+                            <input type="number" class="form-control" name="ancho" required>
                         </div>
                         <div class="form-group">
-                            <label for="id_rol">Rol:</label>
-                            <select class="form-control" name="id_rol">
-                                <option value="1">admnistrador</option>
-                                <option value="2">vigilante</option>
-                                <option value="3">aprendiz</option>
-                                <option value="4">visitante</option>
-                                <option value="4">superadministtrador</option>
-                            </select>
+                            <label for="dueño">Dueño:</label>
+                            <input type="text" class="form-control" name="dueño" required>
                         </div>
                         <div class="form-group">
-                            <label for="id_tipo_documento">Tipo de Documento:</label>
-                            <select class="form-control" name="id_tipo_documento">
-                                <option value="1">CC</option>
-                                <option value="2">TI</option>
-                            </select>
+                            <button type="submit" class="btn btn-primary" name="btn-guardar">Guardar</button>
+                            <a href="registro.php" class="btn btn-dark">Volver</a>
                         </div>
-                        <button type="submit" class="btn btn-primary" name="btn-guardar">Guardar</button>
-                        <a href="index.html" class="btn btn-dark">Volver</a>
-                        <p class="mt-3">¿Ya tienes una cuenta? <a class="ingresar" href="login.php">Ingresar</a></p>
                     </form>
                 </div>
             </div>

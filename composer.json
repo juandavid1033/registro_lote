@@ -1,0 +1,9 @@
+{
+    "name": "miorganizacion/sis_proyecto",
+    "autoload": {
+        "psr-4": {
+            "Miorganizacion\\SisProyecto\\": "src/"
+        }
+    },
+    "require": {}
+}
